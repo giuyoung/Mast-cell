@@ -1,0 +1,814 @@
+import scanpy as sc
+import pandas as pd
+import numpy as np
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+import scrublet as scr
+import scipy.io
+import os
+
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams["font.sans-serif"] = "Arial"
+
+%config InlineBackend.figure_format = 'retina'
+
+sc.settings.set_figure_params(dpi=50, dpi_save=300, figsize=(4, 4))
+Mast = sc.read('dataset/TIME_subset_PC50_bbknn_res2/Mast_filtered_0115.h5ad')
+sc.pl.umap(Mast_0703, color='cluster_Act_Mast',legend_loc='on data',show=False)
+sc.pl.umap(Mast_0703, color=['MKI67','FCER1A','MS4A2','HPGDS','CPA3'],show=False)
+ax = sc.pl.matrixplot(
+    Mast_0703,
+    ['MKI67','FCER1A','MS4A2','HPGDS','CPA3'],
+    groupby="cluster_Act_Mast",
+    cmap="Blues",
+    show = False)
+
+plt.savefig("marker_gene_Mast.pdf",bbox_inches = 'tight')
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Mast_0703.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['cancer_type_sum', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Activated mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['cancer_type_sum'] = pd.Categorical(obs_data['cancer_type_sum'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['cancer_type_sum', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Mast_0703.uns['cluster_Mast_0703_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+# 显示图像
+plt.show()
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Mast_0703.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['tissue_type', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Activated mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['tissue_type'] = pd.Categorical(obs_data['tissue_type'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['tissue_type', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Mast_0703.uns['cluster_Mast_0703_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+# 显示图像
+plt.show()
+Mast_0703_pre = Mast_0703[Mast_0703.obs['collection_timepoint'].isin(['Pre'])]
+Mast_0703_pre
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Mast_0703_pre.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['tissue_type', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Activated mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['tissue_type'] = pd.Categorical(obs_data['tissue_type'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['tissue_type', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Mast_0703.uns['cluster_Mast_0703_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+# 显示图像
+plt.show()
+Mast_0703_pre_T = Mast_0703_pre[Mast_0703_pre.obs['tissue_type'].isin(['Primary tumor tissue'])]
+Mast_0703_pre_T
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Mast_0703_pre_T.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['cancer_type_sum', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Activated mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['cancer_type_sum'] = pd.Categorical(obs_data['cancer_type_sum'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['cancer_type_sum', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Mast_0703_pre_T.uns['cluster_Mast_0703_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=14, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cell Proportion', fontsize=14)
+plt.title('Proportion of Activated Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Mast_proportion_cancertype_T.pdf')
+# 显示图像
+plt.show()
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Mast_0703_pre_T.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['cancer_type_sum', 'cluster_Mast_0708']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Proinflammatory mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['cancer_type_sum'] = pd.Categorical(obs_data['cancer_type_sum'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['cancer_type_sum', 'cluster_Mast_0708']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Mast_0703_pre_T.uns['cluster_Mast_0708_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=14, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cell Proportion', fontsize=14)
+plt.title('Proportion of Activated Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Mast_proportion_cancertype_T_2.pdf')
+# 显示图像
+plt.show()
+
+Mast_0703_pre_P = Mast_0703_pre[Mast_0703_pre.obs['tissue_type'].isin(['Uninvolved normal tissue'])]
+Mast_0703_pre_P
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Mast_0703_pre_P.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['cancer_type_sum', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Activated mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['cancer_type_sum'] = pd.Categorical(obs_data['cancer_type_sum'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['cancer_type_sum', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Mast_0703_pre_P.uns['cluster_Mast_0703_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=14, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Activated Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Mast_proportion_cancertype_P.pdf')
+# 显示图像
+plt.show()
+Mast_0703_pre_M = Mast_0703_pre[Mast_0703_pre.obs['tissue_type'].isin(['Metastatic tumor tissue'])]
+Mast_0703_pre_M
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Mast_0703_pre_M.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['combined_column', 'cluster_Mast_0708']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Proinflammatory mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['combined_column'] = pd.Categorical(obs_data['combined_column'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['combined_column', 'cluster_Mast_0708']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster_Mast_0703 的颜色
+cluster_Mast_0708_colors = Mast_0703_pre_M.uns['cluster_Mast_0708_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_Mast_0708_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=15, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='cluster_Mast_0703', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Mast_proportion_cancertype_M_2.pdf')
+
+# 显示图像
+plt.show()
+# 提取注释到的AT1与AT2
+Immune_pre = Mast_0703_pre_T[Mast_0703_pre_T.obs['dataset'].isin(['GSE123813_BCC','GSE205506_CRC','GSE207422_LC',
+                                      'SCP1288_CRC'])]
+Immune_pre
+Immune_pre2 = Immune_pre[~Immune_pre.obs['response_IO'].isin(['NA'])]
+Immune_pre2
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.stats import chi2_contingency
+
+# 提取观测数据
+obs_data = Immune_pre2.obs
+
+# 计算每个 response_IO 中 Activated mast cells 的比例
+cell_counts = obs_data.groupby(['response_IO', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Activated mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Activated mast cells'].sort_values()
+
+# 手动设置 'response_IO' 的顺序，确保 'Non-responder' 在左，'Responder' 在右
+obs_data['response_IO'] = pd.Categorical(obs_data['response_IO'], categories=['Non-responder', 'Responder'], ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['response_IO', 'cluster_Mast_0703']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[['Non-responder', 'Responder']]
+
+# 获取 cluster_Mast_0703 的颜色
+Immune_pre2_colors = Immune_pre2.uns['cluster_Mast_0703_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=Immune_pre2_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(['Non-responder', 'Responder']):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=15, fontweight='bold')
+
+# 计算卡方检验
+chi2, p, dof, ex = chi2_contingency(cell_counts)
+
+# 设置图例和标签
+plt.legend(title='cluster_Mast_0703', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+
+# 在图中标注 p 值
+plt.text(0.5, 1.05, f'p = {p:.3e}', ha='center', va='bottom', fontsize=12, fontweight='bold', transform=ax.transAxes)
+
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Mast_IO.pdf')
+
+# 显示图像
+plt.show()
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.stats import chi2_contingency
+
+# 提取观测数据
+obs_data = Immune_pre2.obs
+
+# 计算每个 response_IO 中 Activated mast cells 的比例
+cell_counts = obs_data.groupby(['response_IO', 'cluster_Mast_0708']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Activated mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Proinflammatory mast cells'].sort_values()
+
+# 手动设置 'response_IO' 的顺序，确保 'Non-responder' 在左，'Responder' 在右
+obs_data['response_IO'] = pd.Categorical(obs_data['response_IO'], categories=['Non-responder', 'Responder'], ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['response_IO', 'cluster_Mast_0708']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[['Non-responder', 'Responder']]
+
+# 获取 cluster_Mast_0703 的颜色
+Immune_pre2_colors = Immune_pre2.uns['cluster_Mast_0708_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=Immune_pre2_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(['Non-responder', 'Responder']):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=15, fontweight='bold')
+
+# 计算卡方检验
+chi2, p, dof, ex = chi2_contingency(cell_counts)
+
+# 设置图例和标签
+plt.legend(title='cluster_Mast_0703', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+
+# 在图中标注 p 值
+plt.text(0.5, 1.05, f'p = {p:.3e}', ha='center', va='bottom', fontsize=12, fontweight='bold', transform=ax.transAxes)
+
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Mast_IO_2.pdf')
+
+# 显示图像
+plt.show()
+Act_Mast = Mast_0703[Mast_0703.obs['cluster_Act_Mast'].isin(['Activated mast cells'])]
+Act_Mast
+Act_Mast.obs['cluster_Act_Mast'] = Act_Mast.obs['leiden']
+cluster_names = {'0':'Angiogenic mast cells', 
+                 '1':'Proinflammatory mast cells', 
+                 '2':'Angiogenic mast cells',
+                 '3':'Proinflammatory mast cells', 
+                 '4':'Proinflammatory mast cells', 
+                 '5':'Angiogenic mast cells',
+                 '6':'Proinflammatory mast cells',
+                 '7':'Proinflammatory mast cells',
+                 '8':'Proinflammatory mast cells', 
+                 '9':'Angiogenic mast cells', 
+                 '10':'Proinflammatory mast cells'}
+
+Act_Mast.obs = Act_Mast.obs.replace({'cluster_Act_Mast': cluster_names})
+sc.pl.umap(Act_Mast, color='cluster_Act_Mast',legend_loc='on data',show=False)
+ax = sc.pl.matrixplot(
+    Act_Mast,
+    ['HLA-DRA','HLA-DPA1','HLA-DPB1','HLA-DRB1','CD74',
+      'VEGFA','VEGFB'],
+    groupby="cluster_Act_Mast",
+    cmap="Blues",
+    show=False)
+plt.savefig("marker_gene_Act_Mast.pdf",bbox_inches = 'tight')
+import gseapy as gp
+# simple plotting function
+from gseapy.plot import barplot, dotplot
+
+names = gp.get_library_name()  # default: Human
+res_GO = gp.gsea(data=Act_Mast.to_df().T, # row -> genes, column-> samples
+        gene_sets="GO_Biological_Process_2023",
+        cls=Act_Mast.obs.cluster_Act_Mast,
+        permutation_num=1000,
+        permutation_type='phenotype',
+        outdir=None,
+        method='s2n', # signal_to_noise
+        threads= 16)
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Act_Mast.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['cancer_type_sum', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Proinflammatory mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['cancer_type_sum'] = pd.Categorical(obs_data['cancer_type_sum'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['cancer_type_sum', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Act_Mast.uns['cluster_Act_Mast_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+# 显示图像
+plt.show()
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Act_Mast.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['tissue_type', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Proinflammatory mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['tissue_type'] = pd.Categorical(obs_data['tissue_type'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['tissue_type', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Act_Mast.uns['cluster_Act_Mast_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+# 显示图像
+plt.show()
+Act_Mast_pre = Act_Mast[Act_Mast.obs['collection_timepoint'].isin(['Pre'])]
+Act_Mast_pre
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Act_Mast_pre.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['tissue_type', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Proinflammatory mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['tissue_type'] = pd.Categorical(obs_data['tissue_type'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['tissue_type', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Act_Mast.uns['cluster_Act_Mast_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+# 显示图像
+plt.show()
+
+Act_Mast_pre_T = Act_Mast_pre[Act_Mast_pre.obs['tissue_type'].isin(['Primary tumor tissue'])]
+Act_Mast_pre_T
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Act_Mast_pre_T.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['cancer_type_sum', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Proinflammatory mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['cancer_type_sum'] = pd.Categorical(obs_data['cancer_type_sum'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['cancer_type_sum', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Act_Mast_pre_T.uns['cluster_Act_Mast_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=14, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cell Proportion', fontsize=14)
+plt.title('Proportion of Activated Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Act_Mast_proportion_cancertype_T.pdf')
+# 显示图像
+plt.show()
+
+Act_Mast_pre_P = Act_Mast_pre[Act_Mast_pre.obs['tissue_type'].isin(['Uninvolved normal tissue'])]
+Act_Mast_pre_P
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Act_Mast_pre_P.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['cancer_type_sum', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Proinflammatory mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['cancer_type_sum'] = pd.Categorical(obs_data['cancer_type_sum'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['cancer_type_sum', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster 的颜色
+cluster_colors = Act_Mast_pre_P.uns['cluster_Act_Mast_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=14, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='Cluster', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Activated Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Act_Mast_proportion_cancertype_P.pdf')
+# 显示图像
+plt.show()
+
+Act_Mast_pre_M = Act_Mast_pre[Act_Mast_pre.obs['tissue_type'].isin(['Metastatic tumor tissue'])]
+Act_Mast_pre_M
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = Act_Mast_pre_M.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['combined_column', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Proinflammatory mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['combined_column'] = pd.Categorical(obs_data['combined_column'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['combined_column', 'cluster_Act_Mast']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 获取 cluster_Mast_0703 的颜色
+cluster_Mast_0703_colors = Act_Mast_pre_M.uns['cluster_Act_Mast_colors']
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=cluster_Mast_0703_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=15, fontweight='bold')
+
+# 设置图例和标签
+plt.legend(title='cluster_Mast_0703', fontsize='large', title_fontsize='13')
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Act_Mast_proportion_cancertype_M.pdf')
+
+# 显示图像
+plt.show()
