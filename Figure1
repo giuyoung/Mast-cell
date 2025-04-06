@@ -1,0 +1,658 @@
+import scanpy as sc
+import pandas as pd
+import numpy as np
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+import scrublet as scr
+import scipy.io
+import os
+
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams["font.sans-serif"] = "Arial"
+
+%config InlineBackend.figure_format = 'retina'
+
+sc.settings.set_figure_params(dpi=50, dpi_save=300, figsize=(4, 4))
+pan = sc.read('dataset/TIME_subset_PC50_bbknn_res2/pan_filtered_annotation_0531.h5ad')
+pan_0703.obs['cluster'] = pan_0703.obs['leiden']
+cluster_names = {'0':'B cells', '1':'Macrophages', '2':'T cells',
+                   '3':'T cells', '4':'T cells', '5':'Fibroblasts',
+                   '6':'Macrophages', '7':'T cells', '8':'Fibroblasts',
+                   '9':'NK cells', '10':'T cells', '11':'Endothelial cells',
+                   '12':'Monocytes', '13':'NK cells', '14':'cDCs',
+                   '15':'Macrophages', '16':'Pericytes', '17':'Macrophages',
+                   '18':'Macrophages', '19':'T cells', '20':'Endothelial cells',
+                   '21':'Plasma cells', '22':'T cells', '23':'Epithelial cells',
+                   '24':'T cells', '25':'T cells', '26':'T cells',
+                   '27':'Fibroblasts', '28':'Macrophages', '29':'T cells',
+                   '30':'T cells', '31':'T cells', '32':'Epithelial cells',
+                   '33':'Plasma cells', '34':'T cells', '35':'T cells',
+                   '36':'Neutrophils', '37':'Mast cells', '38':'Macrophages',
+                   '39':'Fibroblasts', '40':'pDCs', '41':'Endothelial cells',
+                   '42':'T cells'}
+pan_0703.obs = pan_0703.obs.replace({'cluster': cluster_names})
+sc.pl.umap(pan_0703, color='cluster',legend_loc='on data')
+sc.settings.set_figure_params(dpi=50, dpi_save=300, figsize=(10,10))
+sc.pl.umap(pan_0703, color='cluster',legend_loc='on data',show=False, frameon=False)
+plt.savefig("umap_total.pdf")
+marker_genes_dict = {
+    "Endothelial cells": ["PECAM1", "VWF"],
+    "Fibroblats": ["COL3A1", "COL1A1"],
+    "Pericytes": ["RGS5"],
+    "Macrophages": ["CD68"],
+    "Monocytes": ["FCN1"],
+    "Neutrophils": ["FCGR3B","CSF3R"],
+    "cDCs": ["CLEC9A","CD1C","LAMP3"],
+    "T cells": ["CD3D", "CD3E"],
+    "NK cells": ["GNLY", "NKG7"],
+    "pDCs": ["IL3RA","LILRA4"],
+    "B cells": ["CD79A","MS4A1"],
+    "Plasma cells": ["JCHAIN","MZB1"],
+    "Mast cells": ["TPSAB1","TPSB2"],
+}
+sc.tl.dendrogram(pan_0703,groupby = "cluster")
+sc.pl.matrixplot(pan_0703, marker_genes_dict, "cluster", dendrogram=True,cmap = 'Blues', show = False)
+plt.savefig("marker_gene_total.pdf",bbox_inches = 'tight')
+pan_T = pan_0703[pan_0703.obs['tissue_type'].isin(['Primary tumor tissue'])]
+pre = pan_T[pan_T.obs['collection_timepoint'].isin(['Pre'])]
+cluster_colors = pan_0703.uns['cluster_colors']
+
+# 计算每个 cancer_type_sum 组别中 Mast cells 的数量
+mast_cells_counts = pre.obs[pre.obs['cluster'] == 'Mast cells'].groupby('cancer_type_sum').size()
+
+# 计算每个 cancer_type_sum 组别中的总细胞数量
+total_cells_counts = pre.obs.groupby('cancer_type_sum').size()
+
+# 计算每个组别中 Mast cells 的占比
+mast_cells_percentage = (mast_cells_counts / total_cells_counts) * 100
+
+# 将结果转换为 DataFrame 以便于绘图
+mast_cells_percentage_df = mast_cells_percentage.reset_index()
+mast_cells_percentage_df.columns = ['cancer_type_sum', 'Mast cells percentage']
+
+# 按照 Mast cells 的占比从高到低排序
+mast_cells_percentage_df = mast_cells_percentage_df.sort_values(by='Mast cells percentage', ascending=False)
+
+# 排序后的 cancer_type_sum 顺序
+sorted_cancer_types = mast_cells_percentage_df['cancer_type_sum'].values
+
+# 假设 cell_percentages_sorted 按 cancer_type_sum 进行了分组并计算了比例
+cell_percentages_sorted = pre.obs.groupby(['cancer_type_sum', 'cluster']).size().unstack(fill_value=0)
+cell_percentages_sorted = cell_percentages_sorted.div(cell_percentages_sorted.sum(axis=1), axis=0)
+
+# 确保 cell_percentages_sorted 数据框按照 sorted_cancer_types 排序
+cell_percentages_sorted = cell_percentages_sorted.loc[sorted_cancer_types]
+
+# 确保 Mast cells 列在最后
+columns = list(cell_percentages_sorted.columns)
+if 'Mast cells' in columns:
+    columns.append(columns.pop(columns.index('Mast cells')))
+cell_percentages_sorted = cell_percentages_sorted[columns]
+
+# 设置颜色映射
+colors = {cluster: color for cluster, color in zip(pan_0703.obs['cluster'].cat.categories, cluster_colors)}
+color_list = [colors[col] for col in cell_percentages_sorted.columns]
+
+# 绘制堆积柱状图
+ax = cell_percentages_sorted.plot(kind='bar', stacked=True, color=color_list, figsize=(12, 8))
+plt.title('Proportion of All Cells by Cancer Type')
+plt.xlabel('Cancer Type')
+plt.ylabel('Proportion')
+plt.legend(title='Cell Type')
+plt.grid(False)  # 去除网格线
+
+# 在每个柱子上标注 Mast cells 的百分比
+for i, cancer_type in enumerate(sorted_cancer_types):
+    percentage = mast_cells_percentage_df[mast_cells_percentage_df['cancer_type_sum'] == cancer_type]['Mast cells percentage'].values[0]
+    # 找到每个柱子顶部的 y 坐标，并添加一个偏移量以确保标注不在柱子内部
+    y_pos = cell_percentages_sorted.loc[cancer_type].cumsum()[-1] + 0.01
+    ax.text(i, y_pos, f"{percentage:.2f}%", ha='center', va='bottom', fontsize=10, color='black')
+
+# 将图例放在图的右边
+plt.legend(title='Cell Type', bbox_to_anchor=(1.05, 1), loc='upper left')
+
+plt.show()
+Immune_pre = pre[pre.obs['dataset'].isin(['GSE123813_BCC','GSE205506_CRC','GSE207422_LC',
+                                      'SCP1288_CRC'])]
+Immune_pre2 = Immune_pre[~Immune_pre.obs['response_IO'].isin(['NA'])]
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 假设 Immune_pre2.obs 已经加载并包含 'response_IO' 和 'cluster' 列
+
+# 计算每个 response_IO 组别中 Mast cells 的数量
+mast_cells_counts = Immune_pre2.obs[Immune_pre2.obs['cluster'] == 'Mast cells'].groupby('response_IO').size()
+
+# 计算每个 response_IO 组别中的总细胞数量
+total_cells_counts = Immune_pre2.obs.groupby('response_IO').size()
+
+# 计算每个组别中 Mast cells 的占比
+mast_cells_percentage = (mast_cells_counts / total_cells_counts) * 100
+
+# 将结果转换为 DataFrame 以便于绘图
+mast_cells_percentage_df = mast_cells_percentage.reset_index()
+mast_cells_percentage_df.columns = ['response_IO', 'Mast cells percentage']
+
+# 创建 cell_percentages_sorted 数据框，假设包含了所有细胞类型的比例数据
+# 在这里，我们需要将数据框按照 'response_IO' 分组
+cell_percentages_sorted = Immune_pre2.obs.groupby(['response_IO', 'cluster']).size().unstack(fill_value=0)
+cell_percentages_sorted = cell_percentages_sorted.div(cell_percentages_sorted.sum(axis=1), axis=0)
+
+# 确保 Mast cells 列在最后
+columns = list(cell_percentages_sorted.columns)
+if 'Mast cells' in columns:
+    columns.append(columns.pop(columns.index('Mast cells')))
+cell_percentages_sorted = cell_percentages_sorted[columns]
+
+# 设置颜色映射，假设 cluster_colors 是一个包含每个 cluster 颜色的列表
+# cluster_colors = ["color1", "color2", ..., "colorN"]
+cluster_colors = Immune_pre2.uns['cluster_colors']  # 假设颜色映射存储在此处
+cluster_names = Immune_pre2.obs['cluster'].cat.categories
+color_dict = {name: color for name, color in zip(cluster_names, cluster_colors)}
+colors = [color_dict[col] for col in cell_percentages_sorted.columns]
+
+# 绘制堆积柱状图
+ax = cell_percentages_sorted.plot(kind='bar', stacked=True, color=colors, figsize=(12, 8))
+plt.title('Proportion of All Cells by Response IO')
+plt.xlabel('Response IO')
+plt.ylabel('Proportion')
+plt.legend(title='Cell Type', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(False)  # 去除网格线
+
+# 在每个柱子上标注 Mast cells 的百分比
+for i, response_IO in enumerate(cell_percentages_sorted.index):
+    if response_IO in mast_cells_percentage_df['response_IO'].values:
+        percentage = mast_cells_percentage_df[mast_cells_percentage_df['response_IO'] == response_IO]['Mast cells percentage'].values[0]
+        # 找到每个柱子顶部的 y 坐标，并添加一个偏移量以确保标注不在柱子内部
+        y_pos = cell_percentages_sorted.loc[response_IO].cumsum()[-1] + 0.01
+        ax.text(i, y_pos, f"{percentage:.2f}%", ha='center', va='bottom', fontsize=10, color='black')
+
+plt.show()
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 计算每个 response_IO 组别中 Myeloid cells 的数量
+myeloid_cells_types = ["Macrophages", "Monocytes", "cDCs", "pDCs", "Mast cells", "Neutrophils"]
+myeloid_cells_counts = Immune_pre2.obs[Immune_pre2.obs['cluster'].isin(myeloid_cells_types)].groupby('response_IO').size()
+
+# 计算每个 response_IO 组别中的 Mast cells 的数量
+mast_cells_counts = Immune_pre2.obs[Immune_pre2.obs['cluster'] == 'Mast cells'].groupby('response_IO').size()
+
+# 计算每个组别中 Mast cells 占 Myeloid cells 的比例
+mast_cells_percentage = (mast_cells_counts / myeloid_cells_counts) * 100
+
+# 将结果转换为 DataFrame 以便于绘图
+mast_cells_percentage_df = mast_cells_percentage.reset_index()
+mast_cells_percentage_df.columns = ['response_IO', 'Mast cells percentage']
+
+# 打印调试信息
+print("Mast cells percentage DataFrame:\n", mast_cells_percentage_df)
+
+# 创建 myeloid_cells_percentages_sorted 数据框，计算 Myeloid cells 中各细胞类型的比例
+myeloid_cells_percentages_sorted = Immune_pre2.obs[Immune_pre2.obs['cluster'].isin(myeloid_cells_types)]
+myeloid_cells_percentages_sorted = myeloid_cells_percentages_sorted.groupby(['response_IO', 'cluster']).size().unstack(fill_value=0)
+myeloid_cells_percentages_sorted = myeloid_cells_percentages_sorted.div(myeloid_cells_percentages_sorted.sum(axis=1), axis=0)
+
+# 只保留 Myeloid cells 的细胞类型
+myeloid_cells_percentages_sorted = myeloid_cells_percentages_sorted[myeloid_cells_types]
+
+# 确保 Mast cells 列在最后
+columns = list(myeloid_cells_percentages_sorted.columns)
+if 'Mast cells' in columns:
+    columns.append(columns.pop(columns.index('Mast cells')))
+myeloid_cells_percentages_sorted = myeloid_cells_percentages_sorted[columns]
+
+# 设置颜色映射，假设 cluster_colors 是一个包含每个 cluster 颜色的列表
+# cluster_colors = ["color1", "color2", ..., "colorN"]
+cluster_colors = Immune_pre2.uns['cluster_colors']  # 假设颜色映射存储在此处
+cluster_names = Immune_pre2.obs['cluster'].cat.categories
+color_dict = {name: color for name, color in zip(cluster_names, cluster_colors)}
+colors = [color_dict[col] for col in myeloid_cells_percentages_sorted.columns]
+
+# 绘制堆积柱状图
+ax = myeloid_cells_percentages_sorted.plot(kind='bar', stacked=True, color=colors, figsize=(12, 8))
+plt.title('Proportion of Myeloid Cells by Response IO')
+plt.xlabel('Response IO')
+plt.ylabel('Proportion')
+plt.legend(title='Myeloid Cell Type', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(False)  # 去除网格线
+
+# 在每个柱子上标注 Mast cells 的百分比
+for i, response_IO in enumerate(myeloid_cells_percentages_sorted.index):
+    if response_IO in mast_cells_percentage_df['response_IO'].values:
+        percentage = mast_cells_percentage_df[mast_cells_percentage_df['response_IO'] == response_IO]['Mast cells percentage'].values[0]
+        # 找到每个柱子顶部的 y 坐标，并添加一个偏移量以确保标注不在柱子内部
+        y_pos = myeloid_cells_percentages_sorted.loc[response_IO].cumsum()[-1] + 0.01
+        ax.text(i, y_pos, f"{percentage:.2f}%", ha='center', va='bottom', fontsize=10, color='black')
+
+plt.show()
+GSE205013_PDAC_pre = pre[pre.obs['dataset'].isin(['GSE205013_PDAC'])]
+GSE205013_PDAC_pre
+GSE205013_PDAC_pre2 = GSE205013_PDAC_pre[~GSE205013_PDAC_pre.obs['response'].isin(['NA'])]
+GSE205013_PDAC_pre2
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 假设 GSE205013_PDAC_pre2.obs 已经加载并包含 'response' 和 'cluster' 列
+
+# 计算每个 response 组别中 Mast cells 的数量
+mast_cells_counts = GSE205013_PDAC_pre2.obs[GSE205013_PDAC_pre2.obs['cluster'] == 'Mast cells'].groupby('response').size()
+
+# 计算每个 response 组别中的总细胞数量
+total_cells_counts = GSE205013_PDAC_pre2.obs.groupby('response').size()
+
+# 计算每个组别中 Mast cells 的占比
+mast_cells_percentage = (mast_cells_counts / total_cells_counts) * 100
+
+# 将结果转换为 DataFrame 以便于绘图
+mast_cells_percentage_df = mast_cells_percentage.reset_index()
+mast_cells_percentage_df.columns = ['response', 'Mast cells percentage']
+
+# 创建 cell_percentages_sorted 数据框，假设包含了所有细胞类型的比例数据
+# 在这里，我们需要将数据框按照 'response' 分组
+cell_percentages_sorted = GSE205013_PDAC_pre2.obs.groupby(['response', 'cluster']).size().unstack(fill_value=0)
+cell_percentages_sorted = cell_percentages_sorted.div(cell_percentages_sorted.sum(axis=1), axis=0)
+
+# 确保 Mast cells 列在最后
+columns = list(cell_percentages_sorted.columns)
+if 'Mast cells' in columns:
+    columns.append(columns.pop(columns.index('Mast cells')))
+cell_percentages_sorted = cell_percentages_sorted[columns]
+
+# 设置颜色映射，假设 cluster_colors 是一个包含每个 cluster 颜色的列表
+# cluster_colors = ["color1", "color2", ..., "colorN"]
+cluster_colors = GSE205013_PDAC_pre2.uns['cluster_colors']  # 假设颜色映射存储在此处
+cluster_names = GSE205013_PDAC_pre2.obs['cluster'].cat.categories
+color_dict = {name: color for name, color in zip(cluster_names, cluster_colors)}
+colors = [color_dict[col] for col in cell_percentages_sorted.columns]
+
+# 绘制堆积柱状图
+ax = cell_percentages_sorted.plot(kind='bar', stacked=True, color=colors, figsize=(12, 8))
+plt.title('Proportion of All Cells by Response IO')
+plt.xlabel('Response IO')
+plt.ylabel('Proportion')
+plt.legend(title='Cell Type', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(False)  # 去除网格线
+
+# 在每个柱子上标注 Mast cells 的百分比
+for i, response in enumerate(cell_percentages_sorted.index):
+    if response in mast_cells_percentage_df['response'].values:
+        percentage = mast_cells_percentage_df[mast_cells_percentage_df['response'] == response]['Mast cells percentage'].values[0]
+        # 找到每个柱子顶部的 y 坐标，并添加一个偏移量以确保标注不在柱子内部
+        y_pos = cell_percentages_sorted.loc[response].cumsum()[-1] + 0.01
+        ax.text(i, y_pos, f"{percentage:.2f}%", ha='center', va='bottom', fontsize=10, color='black')
+
+plt.show()
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 计算每个 response 组别中 Myeloid cells 的数量
+myeloid_cells_types = ["Macrophages", "Monocytes", "cDCs", "pDCs", "Mast cells", "Neutrophils"]
+myeloid_cells_counts = GSE205013_PDAC_pre2.obs[GSE205013_PDAC_pre2.obs['cluster'].isin(myeloid_cells_types)].groupby('response').size()
+
+# 计算每个 response 组别中的 Mast cells 的数量
+mast_cells_counts = GSE205013_PDAC_pre2.obs[GSE205013_PDAC_pre2.obs['cluster'] == 'Mast cells'].groupby('response').size()
+
+# 计算每个组别中 Mast cells 占 Myeloid cells 的比例
+mast_cells_percentage = (mast_cells_counts / myeloid_cells_counts) * 100
+
+# 将结果转换为 DataFrame 以便于绘图
+mast_cells_percentage_df = mast_cells_percentage.reset_index()
+mast_cells_percentage_df.columns = ['response', 'Mast cells percentage']
+
+# 打印调试信息
+print("Mast cells percentage DataFrame:\n", mast_cells_percentage_df)
+
+# 创建 myeloid_cells_percentages_sorted 数据框，计算 Myeloid cells 中各细胞类型的比例
+myeloid_cells_percentages_sorted = GSE205013_PDAC_pre2.obs[GSE205013_PDAC_pre2.obs['cluster'].isin(myeloid_cells_types)]
+myeloid_cells_percentages_sorted = myeloid_cells_percentages_sorted.groupby(['response', 'cluster']).size().unstack(fill_value=0)
+myeloid_cells_percentages_sorted = myeloid_cells_percentages_sorted.div(myeloid_cells_percentages_sorted.sum(axis=1), axis=0)
+
+# 只保留 Myeloid cells 的细胞类型
+myeloid_cells_percentages_sorted = myeloid_cells_percentages_sorted[myeloid_cells_types]
+
+# 确保 Mast cells 列在最后
+columns = list(myeloid_cells_percentages_sorted.columns)
+if 'Mast cells' in columns:
+    columns.append(columns.pop(columns.index('Mast cells')))
+myeloid_cells_percentages_sorted = myeloid_cells_percentages_sorted[columns]
+
+# 设置颜色映射，假设 cluster_colors 是一个包含每个 cluster 颜色的列表
+# cluster_colors = ["color1", "color2", ..., "colorN"]
+cluster_colors = GSE205013_PDAC_pre2.uns['cluster_colors']  # 假设颜色映射存储在此处
+cluster_names = GSE205013_PDAC_pre2.obs['cluster'].cat.categories
+color_dict = {name: color for name, color in zip(cluster_names, cluster_colors)}
+colors = [color_dict[col] for col in myeloid_cells_percentages_sorted.columns]
+
+# 绘制堆积柱状图
+ax = myeloid_cells_percentages_sorted.plot(kind='bar', stacked=True, color=colors, figsize=(12, 8))
+plt.title('Proportion of Myeloid Cells by Response IO')
+plt.xlabel('Response IO')
+plt.ylabel('Proportion')
+plt.legend(title='Myeloid Cell Type', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(False)  # 去除网格线
+
+# 在每个柱子上标注 Mast cells 的百分比
+for i, response in enumerate(myeloid_cells_percentages_sorted.index):
+    if response in mast_cells_percentage_df['response'].values:
+        percentage = mast_cells_percentage_df[mast_cells_percentage_df['response'] == response]['Mast cells percentage'].values[0]
+        # 找到每个柱子顶部的 y 坐标，并添加一个偏移量以确保标注不在柱子内部
+        y_pos = myeloid_cells_percentages_sorted.loc[response].cumsum()[-1] + 0.01
+        ax.text(i, y_pos, f"{percentage:.2f}%", ha='center', va='bottom', fontsize=10, color='black')
+
+plt.show()
+pan_pre_T = pan_0703_pre[pan_0703_pre.obs['tissue_type'].isin(['Primary tumor tissue'])]
+pan_pre_T
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = pan_pre_T.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['cancer_type_sum', 'cluster']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['cancer_type_sum'] = pd.Categorical(obs_data['cancer_type_sum'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['cancer_type_sum', 'cluster']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 将 Mast cells 列移动到最后一列
+mast_cells_col = cell_proportions.pop('Mast cells')
+cell_proportions['Mast cells'] = mast_cells_col
+
+# 获取 cluster 的颜色，确保是一个字典或Series
+cluster_colors_dict = dict(zip(pan_pre_T.obs['cluster'].cat.categories, pan_pre_T.uns['cluster_colors']))
+
+# 确保颜色与 cluster 的顺序一致
+sorted_cluster_colors = [cluster_colors_dict[label] for label in cell_proportions.columns]
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=sorted_cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=15, fontweight='bold')
+
+# 设置图例和标签
+handles, labels = ax.get_legend_handles_labels()
+ax.legend(reversed(handles), reversed(labels), title='Cluster', fontsize='large', title_fontsize='13')
+
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Mast_proportion_cancertype_T.pdf')
+
+# 显示图像
+plt.show()
+
+pan_pre_P = pan_0703_pre[pan_0703_pre.obs['tissue_type'].isin(['Uninvolved normal tissue'])]
+pan_pre_P
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = pan_pre_P.obs
+
+# 计算每个 cancer_type_sum 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['cancer_type_sum', 'cluster']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['cancer_type_sum'] = pd.Categorical(obs_data['cancer_type_sum'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['cancer_type_sum', 'cluster']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 将 Mast cells 列移动到最后一列
+mast_cells_col = cell_proportions.pop('Mast cells')
+cell_proportions['Mast cells'] = mast_cells_col
+
+# 获取 cluster 的颜色，确保是一个字典或Series
+cluster_colors_dict = dict(zip(pan_pre_P.obs['cluster'].cat.categories, pan_pre_P.uns['cluster_colors']))
+
+# 确保颜色与 cluster 的顺序一致
+sorted_cluster_colors = [cluster_colors_dict[label] for label in cell_proportions.columns]
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=sorted_cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=15, fontweight='bold')
+
+# 设置图例和标签
+handles, labels = ax.get_legend_handles_labels()
+ax.legend(reversed(handles), reversed(labels), title='Cluster', fontsize='large', title_fontsize='13')
+
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Mast_proportion_cancertype_P.pdf')
+
+# 显示图像
+plt.show()
+
+pan_pre_M = pan_0703_pre[pan_0703_pre.obs['tissue_type'].isin(['Metastatic tumor tissue'])]
+pan_pre_M
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 提取观测数据
+obs_data = pan_pre_M.obs
+
+# 计算每个 combined_column 中 Mast cells 的比例
+cell_counts = obs_data.groupby(['combined_column', 'cluster']).size().unstack(fill_value=0)
+cell_proportions = cell_counts.div(cell_counts.sum(axis=1), axis=0)
+
+# 获取 Mast cells 的比例，并按比例从低到高排序
+mast_cell_proportions = cell_proportions['Mast cells'].sort_values()
+
+# 将排序应用于数据
+obs_data['combined_column'] = pd.Categorical(obs_data['combined_column'], categories=mast_cell_proportions.index, ordered=True)
+
+# 重新计算根据排序后的数据
+cell_proportions = obs_data.groupby(['combined_column', 'cluster']).size().unstack(fill_value=0)
+cell_proportions = cell_proportions.div(cell_proportions.sum(axis=1), axis=0)
+cell_proportions = cell_proportions.loc[mast_cell_proportions.index]
+
+# 将 Mast cells 列移动到最后一列
+mast_cells_col = cell_proportions.pop('Mast cells')
+cell_proportions['Mast cells'] = mast_cells_col
+
+# 获取 cluster 的颜色，确保是一个字典或Series
+cluster_colors_dict = dict(zip(pan_pre_P.obs['cluster'].cat.categories, pan_pre_P.uns['cluster_colors']))
+
+# 确保颜色与 cluster 的顺序一致
+sorted_cluster_colors = [cluster_colors_dict[label] for label in cell_proportions.columns]
+
+# 创建堆叠柱状图
+fig, ax = plt.subplots(figsize=(10, 10))
+cell_proportions.plot(kind='bar', stacked=True, ax=ax, color=sorted_cluster_colors)
+
+# 去除网格线
+ax.grid(False)
+
+# 添加 Mast cells 的比例标注
+for i, cancer_type in enumerate(mast_cell_proportions.index):
+    proportion = mast_cell_proportions[cancer_type]
+    ax.text(i, 1, f'{proportion:.2%}', ha='center', va='bottom', fontsize=15, fontweight='bold')
+
+# 设置图例和标签
+handles, labels = ax.get_legend_handles_labels()
+ax.legend(reversed(handles), reversed(labels), title='Cluster', fontsize='large', title_fontsize='13')
+
+plt.xlabel('Cancer Type', fontsize=14)
+plt.ylabel('Cells per Stage', fontsize=14)
+plt.title('Proportion of Mast Cells per Cancer Type', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('Mast_proportion_cancertype_M.pdf')
+
+# 显示图像
+plt.show()
+
+import pandas as pd
+import scipy.stats as stats
+
+# 提取观测数据
+obs_data = pan_0703.obs
+
+# 计算每个 sample_id 中每种细胞类型的数量
+cell_counts = obs_data.groupby(['dataset', 'cluster']).size().unstack(fill_value=0)
+
+# 提取 'Proinflammatory mast cells' 的数量
+mast_cells_counts = cell_counts['Mast cells']
+
+# 存储结果
+correlation_results = []
+
+# 计算 'Proinflammatory mast cells' 与其他细胞类型的 Spearman 相关性
+for cell_type in cell_counts.columns:
+    if cell_type != 'Mast cells':
+        correlation, p_value = stats.spearmanr(mast_cells_counts, cell_counts[cell_type])
+        correlation_results.append({
+            'Cell Type': cell_type,
+            'Spearman Correlation': correlation,
+            'p-value': p_value
+        })
+
+# 转换结果为 DataFrame 并输出
+correlation_df = pd.DataFrame(correlation_results)
+print(correlation_df)
+
+pre = pan_0703[pan_0703.obs['collection_timepoint'].isin(['Pre'])]
+pre
+
+import pandas as pd
+from scipy.stats import spearmanr
+
+# 计算频率分布
+frequency_table = pd.crosstab(pre.obs['sample_id'], pre.obs['cluster'], normalize='index')
+# 计算Spearman相关性矩阵
+correlation_matrix, p_values = spearmanr(frequency_table)
+# 创建一个DataFrame用于热图绘制
+correlation_df = pd.DataFrame(correlation_matrix, index=frequency_table.columns, columns=frequency_table.columns)
+# 绘制带有聚类的热图，调整标签属性
+g = sns.clustermap(correlation_df, 
+                   cmap='coolwarm', 
+                   vmin=-1, vmax=1, 
+                   method='single', 
+                   metric='euclidean', 
+                   figsize=(15, 15))  # 增加图形的高度
+
+# 调整x轴标签
+plt.setp(g.ax_heatmap.get_xticklabels(), rotation=45, ha="right", fontsize=15)  # 调整x轴标签字体大小
+
+# 调整y轴标签
+g.ax_heatmap.set_yticklabels(g.ax_heatmap.get_yticklabels(), rotation=0, fontsize=15)  # 调整y轴标签字体大小
+
+# 去除网格线
+g.ax_heatmap.grid(False)
+
+# 调整布局以确保标签完全显示
+plt.tight_layout()
+
+# 设置标题（使用 clustermap 方法设置标题会有点不同）
+g.fig.suptitle('Spearman Correlation Clustermap of Cell Type Frequencies by Sample', y=1.02)
+
+plt.savefig('clustermap_pan.pdf')
+
+plt.show()
+
+%matplotlib inline
+
+import os
+import pandas as pd
+import numpy as np
+from scipy.io import mmread
+import scipy.sparse as sp
+import matplotlib.pyplot as plt
+from IPython.display import Image
+import scanpy as sc
+from cnmf import cNMF
+np.random.seed(1029)
+numiter=200 # Number of NMF replicates. Set this to a larger value ~200 for real data. We set this to a relatively low value here for illustration at a faster speed
+
+## Results will be saved to [output_directory]/[run_name] which in this example is example_PBMC/cNMF/pbmc_cNMF
+output_directory = 'cNMF'
+if not os.path.exists(output_directory):
+    os.mkdir(output_directory)
+run_name = 'pan_cNMF'
+
+## Specify the Ks to use as a space separated list in this case "5 6 7 8 9 10"
+K = ' '.join([str(i) for i in range(3,11)])
+
+seed = 1029 ## Specify a seed pseudorandom number generation for reproducibility
+
+## Path to the filtered counts dataset we output previously
+countfn = meta
+## Initialize the cnmf object that will be used to run analyses
+cnmf_obj = cNMF(output_dir=output_directory, name=run_name)
+## Prepare the data, I.e. subset to 2000 high-variance genes, and variance normalize
+cnmf_obj.prepare(counts_fn= 'cNMF_meta.csv', 
+                 components=np.arange(3,11), 
+                 n_iter=20, 
+                 seed=1029)
+
+## Specify that the jobs are being distributed over a single worker (total_workers=1) and then launch that worker
+cnmf_obj.factorize(worker_i=0, total_workers=1)
+cnmf_obj.combine()
+cnmf_obj.k_selection_plot(close_fig=False)
+selected_K = 5
+density_threshold = 0.1
+cnmf_obj.consensus(k=selected_K, density_threshold=density_threshold, show_clustering=True, close_clustergram_fig=False)
+K_celltype = pd.read_csv('cNMF/pan_cNMF/pan_cNMF.spectra.k_5.dt_0_1.consensus.txt', sep='\t')
+K_celltype
+# 删除不需要的列，假设需要删除列 'Gene1' 和 'Gene2'
+K_celltype = K_celltype.drop(['Unnamed: 0'], axis=1)
+K_celltype
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+# median
+clustermap = sns.clustermap(K_celltype, method='average', 
+               metric='euclidean', 
+               cmap='viridis', 
+               figsize=(8, 8))
+
+# 去除网格线
+clustermap.ax_heatmap.grid(False)
+
+plt.savefig('Mast_cNMF.pdf')
+
+# 显示图形
+plt.show()
