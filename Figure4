@@ -1,0 +1,38 @@
+import omicverse as ov
+import scanpy as sc
+import scvelo as scv
+import cellrank as cr
+ov.utils.ov_plot_set()
+# This is a necessary hack. See CellRank docs
+Mast_0703.layers["spliced"] = Mast_0703.X
+Mast_0703.layers["unspliced"] = Mast_0703.X
+scv.pp.moments(Mast_0703, n_pcs=30, n_neighbors=30)
+from cellrank.kernels import CytoTRACEKernel
+ctk = CytoTRACEKernel(Mast_0703).compute_cytotrace()
+sc.settings.set_figure_params(dpi=50, dpi_save=300, figsize=(10, 10))
+sc.pl.umap(Mast_0703, color=['cluster_Mast_0708',"ct_score"],legend_loc='on data',color_map="gnuplot2")
+sc.settings.set_figure_params(dpi=50, dpi_save=300, figsize=(10, 10))
+sc.pl.umap(Mast_0703, color=['ct_pseudotime'],legend_loc='on data',color_map="gnuplot2",show = False)
+ctk.compute_transition_matrix(threshold_scheme="soft", nu=0.5)
+ctk.plot_projection(basis="umap")
+sc.settings.set_figure_params(dpi=50, dpi_save=300, figsize=(10, 10))
+scv.pl.velocity_embedding_stream(
+    Mast_0703, color="cluster_Mast_0708", vkey="T_fwd", basis="umap", legend_loc="on data", show = False)
+
+plt.savefig("Cellrank_umap.pdf",bbox_inches = 'tight')
+import sctour as sct
+sc.pp.calculate_qc_metrics(Mast_0703, percent_top=None, log1p=False, inplace=True)
+sc.pp.highly_variable_genes(Mast_0703, subset=True)
+Mast_0703.X = Mast_0703.X.astype('float32') # convert data to float32 type
+tnode = sct.train.Trainer(Mast_0703, loss_mode='mse')
+tnode.train()
+Mast_0703.obs['ptime'] = tnode.get_time()
+#zs represents the latent z from variational inference, and pred_zs represents the latent z from ODE solver
+#mix_zs represents the weighted combination of the two, which is used for downstream analysis
+mix_zs, zs, pred_zs = tnode.get_latentsp(alpha_z=0.5, alpha_predz=0.5)
+Mast_0703.obsm['X_TNODE'] = mix_zs
+Mast_0703.obsm['X_VF'] = tnode.get_vector_field(Mast_0703.obs['ptime'].values, Mast_0703.obsm['X_TNODE'])
+Mast_0703 = Mast_0703[np.argsort(Mast_0703.obs['ptime'].values), :]
+sc.pl.umap(Mast_0703, color='ptime', show=False, frameon=False)
+
+plt.savefig("ptime.pdf",bbox_inches = 'tight')
