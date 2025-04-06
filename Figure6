@@ -1,0 +1,162 @@
+import scanpy as sc
+import pandas as pd
+import numpy as np
+
+%config InlineBackend.figure_format = 'retina'
+
+sc.settings.set_figure_params(dpi=50, dpi_save=300, figsize=(4, 4))
+GHRB20120531 = sc.read("jupyter_home/dataset/HNSC/GHRB20120531/GHRB20120531_HNSC.h5ad")
+GHRB20120531
+GHRB20120531.obs['cluster'] = GHRB20120531.obs['leiden']
+cluster_names = {'0':'T/NK cells', 
+                 '1':'Tumor cells', 
+                 '2':'T/NK cells',
+                 '3':'Fibroblasts', 
+                 '4':'T/NK cells', 
+                 '5':'Macrophages',
+                 '6':'T/NK cells', 
+                 '7':'T/NK cells', 
+                 '8':'T/NK cells',
+                 '9':'B cells',
+                 '10':'Macrophages',
+                 '11':'T/NK cells',
+                 '12':'T/NK cells',
+                 '13':'T/NK cells',
+                 '14':'B cells', 
+                 '15':'Neutrophils', 
+                 '16':'Endothelial cells',
+                 '17':'Mast cells', 
+                 '18':'DCs', 
+                 '19':'T/NK cells',
+                 '20':'Fibroblasts', 
+                 '21':'T/NK cells', 
+                 '22':'Fibroblasts',
+                 '23':'Tumor cells',
+                 '24':'Tumor cells',
+                 '25':'Fibroblasts'}
+GHRB20120531.obs = GHRB20120531.obs.replace({'cluster': cluster_names})
+sc.pl.umap(GHRB20120531, color="cluster", legend_loc="on data", show = False)
+marker_genes_dict = {
+    "Tumor cells":["EPCAM","KRT5","KRT14"],
+    "Endothelial cells": ["PECAM1", "VWF"],
+    "Fibroblats": ["COL3A1", "COL1A1"],
+    "Macrophages": ["CD68"],
+    "DCs": ["CD1C","LAMP3"],
+    "Neutrophils": ["FCGR3B","CSF3R"],
+    "T/NK cells": ["CD3D", "CD3E","NKG7"],
+    "B cells": ["CD79A","MS4A1","JCHAIN"],
+    "Mast cells": ["TPSAB1","TPSB2"],
+}
+sc.tl.dendrogram(GHRB20120531,groupby = "cluster")
+sc.pl.matrixplot(GHRB20120531, marker_genes_dict, "cluster", dendrogram=True,cmap = 'Blues', show = False)
+plt.savefig("marker_gene_GHRB20120531.pdf",bbox_inches = 'tight')
+Mast2 = GHRB20120531[GHRB20120531.obs['cluster'].isin(['Mast cells'])]
+Mast2
+sc.pl.umap(Mast2, color="cluster_Mast2", legend_loc="on data")
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.stats import chi2_contingency
+
+# 假设 Mast2.obs['sample'] 和 Mast2.obs['cluster_Mast2'] 已经存在于你的数据中
+# 如果你已经有了 `pd.crosstab` 计算的结果，你可以直接使用这些数据
+data = pd.crosstab(Mast2.obs['sample'], Mast2.obs['cluster_Mast2'])
+
+# 指定你想要的细胞类型顺序
+desired_order = ['Resting mast cells', 'Proinflammatory mast cells', 'Angiogenic mast cells', 'Proliferating mast cells']
+
+# 按照指定顺序重新排列列顺序
+data = data.reindex(columns=desired_order)
+
+# 计算各组的总数
+total_counts = data.sum(axis=1)
+
+# 计算每个 cluster_Mast2 类别在两个 sample 状态组中的比例
+percentages = data.div(total_counts, axis=0)
+
+# 获取 cluster_Mast2 的颜色（假设已经存在于 `Mast2.uns['cluster_Mast2_colors']` 中）
+cluster_colors = Mast2.uns['cluster_Mast2_colors']
+
+# 创建颜色映射
+cluster_Mast2_categories = data.columns
+color_mapping = dict(zip(cluster_Mast2_categories, cluster_colors))
+color_order = [color_mapping[cluster] for cluster in cluster_Mast2_categories]
+
+# 绘制堆积柱状图
+fig, ax = plt.subplots(figsize=(12, 8))
+percentages.plot(kind='bar', stacked=True, color=color_order, ax=ax)
+
+plt.title('Proportion of Mast Cell Clusters by sample Status', fontsize=16)
+plt.xlabel('sample Status', fontsize=14)
+plt.ylabel('Proportion', fontsize=14)
+plt.xticks(rotation=45, ha='right', fontsize=12)  # 设置 x 轴标签旋转45度
+plt.yticks(fontsize=12)
+plt.legend(title='Mast Cell Cluster', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12, title_fontsize=14)
+plt.grid(False)  # 去除网格线
+
+# 在每个柱子上标注百分比
+for i, sample_status in enumerate(percentages.index):
+    for j, cluster in enumerate(cluster_Mast2_categories):
+        percentage = percentages.loc[sample_status, cluster] * 100
+        # 找到每个柱子顶部的 y 坐标，并添加一个偏移量以确保标注不在柱子内部
+        y_pos = percentages.loc[sample_status].cumsum()[cluster] - (percentages.loc[sample_status, cluster] / 2)
+        ax.text(i, y_pos, f"{percentage:.2f}%", ha='center', va='center', fontsize=12, color='black')
+
+# 进行卡方检验
+chi2, p, _, _ = chi2_contingency(data)
+
+# 根据 p 值添加星号标注
+if p < 0.001:
+    p_text = '***'
+elif p < 0.01:
+    p_text = '**'
+elif p < 0.05:
+    p_text = '*'
+else:
+    p_text = 'ns'  # not significant
+
+# 在图中标记 p 值，放在两个柱子中间并向下移
+ax.text(0.5, max(ax.get_ylim()) - 0.1,
+        f"chi-square test: {p_text}", 
+        ha='center', va='center', 
+        fontsize=14, 
+        color='black', transform=ax.transAxes)
+
+plt.tight_layout()  # 调整子图参数以给图例和标签留出空间
+
+plt.savefig('GHRB20120531_Mast2_proportion.pdf')
+
+plt.show()
+
+import omicverse as ov
+import scanpy as sc
+import scvelo as scv
+
+ov.utils.ov_plot_set()
+pathway_dict=ov.utils.geneset_prepare('GO_Biological_Process_2023.txt',organism='Human')
+##Assest all pathways
+Mast2_aucs=ov.single.pathway_aucell_enrichment(Mast2,
+                                                  pathways_dict=pathway_dict,
+                                                  num_workers=8)
+                                                
+ax = sc.pl.matrixplot(
+    Mast2_aucs,
+    ['Negative Regulation Of Response To Stimulus (GO:0048585)',
+     'Regulation Of T Cell Activation Via T Cell Receptor Contact With Antigen Bound To MHC Molecule On Antigen Presenting Cell (GO:2001188)',
+     'Macrophage Chemotaxis (GO:0048246)',
+     'Neutrophil Chemotaxis (GO:0030593)',
+     'Eosinophil Chemotaxis (GO:0048245)',
+     'Granulocyte Chemotaxis (GO:0071621)',
+     'Lymphocyte Chemotaxis (GO:0048247)',
+     'Regulation Of T Cell Activation (GO:0050863)',
+     'Regulation Of T Cell Proliferation (GO:0042129)',
+     'Regulation Of Angiogenesis (GO:0045765)',
+     'Sprouting Angiogenesis (GO:0002040)',
+     'Angiogenesis Involved In Wound Healing (GO:0060055)',
+     'Regulation Of Leukocyte Proliferation (GO:0070663)'],
+    groupby="cluster_Mast2",
+    cmap="Reds",
+    swap_axes = True,
+    layer = 'scaled',
+    figsize=(5, 10),
+    show=False)
+plt.savefig("GO_Mast2_GHRB20120531.pdf", bbox_inches='tight')
